@@ -1,0 +1,98 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+### Чтение файла
+
+```{r}
+data <- readxl::read_excel("pima.xlsx", sheet = "pima")
+
+```
+
+### Описательная статистика для переменных glucose, pressure, mass
+
+```{r}
+# Описательная статистика для glucose, pressure, mass
+variables <- c("glucose", "pressure", "mass")
+descriptive_stats <- summary(data[variables])
+descriptive_stats <- rbind(
+  apply(data[variables], 2, mean),
+  apply(data[variables], 2, sd),
+  apply(data[variables], 2, min),
+  apply(data[variables], 2, quantile, probs = 0.25),
+  apply(data[variables], 2, median),
+  apply(data[variables], 2, quantile, probs = 0.75),
+  apply(data[variables], 2, max)
+)
+rownames(descriptive_stats) <- c("Mean", "Std Dev", "Min", "25%", "Median", "75%", "Max")
+
+print("Описательная статистика для glucose, pressure, mass:")
+print(descriptive_stats)
+```
+
+### Описательная статистика для переменной diabetes и создание age_group
+
+```{r}
+# Описательная статистика для diabetes
+diabetes_stats <- table(data$diabetes)
+print("\nРаспределение diabetes:")
+print(diabetes_stats)
+
+# Создание age_group
+data$age_group <- cut(data$age, breaks = c(21, 35, 49, Inf), labels = c("21-35", "36-49", "50+"))
+
+# Описательная статистика для age_group
+age_group_stats <- table(data$age_group)
+print("\nРаспределение age_group:")
+print(age_group_stats)
+```
+
+### Ящики с усами для glucose по группам diabetes
+
+```{r}
+# Построение ящиков с усами
+boxplot(glucose ~ diabetes, data = data, 
+        main = "Распределение glucose по группам diabetes",
+        xlab = "diabetes", ylab = "glucose",
+        col = c("lightblue", "lightgreen"))
+```
+
+### Проверка статистической гипотезы
+
+Используем парный t-тест, так как данные измерялись у одних и тех же пациентов до и после приема препарата.
+
+```{r}
+# Задание seed для воспроизводимости
+set.seed(42)
+
+# Размер выборки
+sample_size <- 30
+
+# Генерация данных: давление до и после приема препарата
+before <- rnorm(sample_size, mean = 150, sd = 10)  # Среднее давление до
+after <- rnorm(sample_size, mean = 140, sd = 10)   # Среднее давление после
+
+# Нулевая и альтернативная гипотезы
+cat("\nГипотезы:\n")
+cat("H0: Среднее давление до и после приема препарата одинаково (μ_before = μ_after)\n")
+cat("H1: Среднее давление после приема препарата ниже (μ_before > μ_after)\n")
+
+# Уровень значимости
+alpha <- 0.05
+
+# Применение t-теста для зависимых выборок
+test_result <- t.test(before, after, paired = TRUE, alternative = "greater")
+
+cat("\nРезультаты теста:\n")
+cat("t-статистика:", test_result$statistic, "\n")
+cat("p-значение:", test_result$p.value, "\n")
+
+if (test_result$p.value < alpha) {
+  cat("Отвергаем H0: препарат статистически значимо снижает давление.\n")
+} else {
+  cat("Не отвергаем H0: нет статистически значимого снижения давления.\n")
+}
+```
+
+Результат теста показывает статистически значимое снижение давления (p \< 0.05).
