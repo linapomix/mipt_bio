@@ -1,0 +1,140 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+# Загрузка необходимых библиотек
+library(tidyverse)   
+library(ggplot2)   
+
+```
+
+### Загрузка датасета
+
+```{r}
+# Загрузка датасета
+df <- read.csv("wisconsin_breast_cancer.csv", sep = ",")
+
+# Преобразование колонок
+df <- df %>%
+  mutate(
+    radius = as.numeric(radius_mean),
+    area = as.numeric(area_mean),
+    perimeter = as.numeric(perimeter_mean)
+  )
+
+# Проверка типов данных
+cat("\nТипы данных после преобразования:\n")
+print(sapply(df, class))
+```
+
+### ЗАДАНИЕ 1
+
+```{r}
+
+# Модель 1: Радиус vs Площадь
+model_area <- lm(area_mean ~ radius_mean, data = df)
+summary(model_area)
+
+# Модель 2: Радиус vs Периметр
+model_perim <- lm(perimeter_mean ~ radius_mean, data = df)
+summary(model_perim)
+
+# Модель 3: Радиус vs Симметричность
+model_symm <- lm(symmetry_mean ~ radius_mean, data = df)
+summary(model_symm)
+
+# Графики
+ggplot(df, aes(x = radius_mean, y = area_mean)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", color = "red") +
+  labs(title = "Радиус vs Площадь")
+
+ggplot(df, aes(x = radius_mean, y = perimeter_mean)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", color = "blue") +
+  labs(title = "Радиус vs Периметр")
+
+ggplot(df, aes(x = radius_mean, y = symmetry_mean)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", color = "green") +
+  labs(title = "Радиус vs Симметричность")
+```
+
+#### Размер опухоли (радиус) является ключевым предиктором её площади и периметра, но практически не влияет на симметричность (p-value=0.0004). Для изучения симметричности лучше использовать другие предикторы, например, текстуру, так как связь между средним радиусом и симметричностью статистически значима, но практически отсутствует.
+
+### ЗАДАНИЕ 2
+
+```{r}
+
+# Преобразование целевой переменной (M=1, B=0)
+df$diagnosis <- ifelse(df$diagnosis == "M", 1, 0)
+
+# Отдельные модели
+# Модель 1: Радиус
+model_radius <- glm(diagnosis ~ radius_mean, data = df, family = "binomial")
+summary(model_radius)
+
+# Модель 2: Площадь
+model_area_log <- glm(diagnosis ~ area_mean, data = df, family = "binomial")
+summary(model_area_log)
+
+# Модель 3: Текстура
+model_texture <- glm(diagnosis ~ texture_mean, data = df, family = "binomial")
+summary(model_texture)
+
+# Графики для отдельных моделей
+ggplot(df, aes(x = radius_mean, y = diagnosis)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "glm", method.args = list(family = "binomial"), 
+              color = "purple") +
+  labs(title = "Вероятность злокачественности от радиуса")
+
+ggplot(df, aes(x = area_mean, y = diagnosis)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "glm", method.args = list(family = "binomial"), 
+              color = "orange") +
+  labs(title = "Вероятность злокачественности от площади")
+
+ggplot(df, aes(x = texture_mean, y = diagnosis)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "glm", method.args = list(family = "binomial"), 
+              color = "yellow") +
+  labs(title = "Вероятность злокачественности от текстуры")
+
+# Объединенная модель
+model_full <- glm(diagnosis ~ radius_mean + area_mean + texture_mean, 
+                 data = df, family = "binomial")
+summary(model_full)
+```
+
+#### В индивидуальных моделях радиус, площадь и текстура **значимо связаны** с злокачественностью. Наибольший вклад вносят размерные параметры (радиус и площадь).
+
+#### В общей модели p-value признаков среднего радиуса и площади статистически не незначимое, признак средней текстуры опухли же имеет статистическое значение. **Текстура** — единственный устойчивый предиктор злокачественности. Радиус и площадь **перекрывают друг друга** из-за мультиколлинеарности.
+
+### ЗАДАНИЕ 3
+
+```{r}
+
+# Параметры
+# Уровень значимости 5% - стандарт 
+alpha <- 0.05
+# Ошибка второго рода (1 - мощность)
+beta <- 0.20 
+HR <- 2
+d <- 0.8
+p1 <- p2 <- 0.5
+
+# Расчет квантилей для нормального распределения
+Z_alpha <- abs(qnorm(1 - alpha / 2))
+Z_beta <- abs(qnorm(beta))
+
+n1 <-(Z_alpha + Z_beta)^2 / (p1 * p2 * (log(HR))^2*d)
+n1 <- ceiling(n1) 
+n_total <- n1 * 2
+
+cat("Размер каждой группы:", n1, "\n")
+cat("Общий размер выборки:", n_total, "\n")
+
+```
