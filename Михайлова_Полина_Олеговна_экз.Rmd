@@ -1,0 +1,257 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-06-09"
+---
+
+### Загрузка библиотек
+
+```{r}
+library(tidyverse)
+library(ggpubr)
+library(car)
+library(nortest)
+library(rstatix)
+library(emmeans)
+library(caret)
+library(pROC)
+
+```
+### Задание 1 Предобработка данных
+
+```{r}
+# Загрузка данных
+kidney_data <- read_csv("kidney_disease_dataset.csv")
+
+# Переименование всех столбцов
+kidney_data <- kidney_data %>%
+  rename(
+    age = `Age of the patient`,
+    bp = `Blood pressure (mm/Hg)`,
+    urine_sg = `Specific gravity of urine`,
+    urine_alb = `Albumin in urine`,
+    urine_sugar = `Sugar in urine`,
+    urine_rbc = `Red blood cells in urine`,
+    urine_pus = `Pus cells in urine`,
+    urine_pus_clumps = `Pus cell clumps in urine`,
+    urine_bacteria = `Bacteria in urine`,
+    glucose = `Random blood glucose level (mg/dl)`,
+    urea = `Blood urea (mg/dl)`,
+    creatinine = `Serum creatinine (mg/dl)`,
+    sodium = `Sodium level (mEq/L)`,
+    potassium = `Potassium level (mEq/L)`,
+    hemoglobin = `Hemoglobin level (gms)`,
+    pcv = `Packed cell volume (%)`,
+    wbc = `White blood cell count (cells/cumm)`,
+    rbc = `Red blood cell count (millions/cumm)`,
+    hypertension = `Hypertension (yes/no)`,
+    diabetes = `Diabetes mellitus (yes/no)`,
+    cad = `Coronary artery disease (yes/no)`,
+    appetite = `Appetite (good/poor)`,
+    pedal_edema = `Pedal edema (yes/no)`,
+    anemia = `Anemia (yes/no)`,
+    egfr = `Estimated Glomerular Filtration Rate (eGFR)`,
+    upcr = `Urine protein-to-creatinine ratio`,
+    urine_output = `Urine output (ml/day)`,
+    albumin = `Serum albumin level`,
+    cholesterol = `Cholesterol level`,
+    pth = `Parathyroid hormone (PTH) level`,
+    calcium = `Serum calcium level`,
+    phosphate = `Serum phosphate level`,
+    ckd_family = `Family history of chronic kidney disease`,
+    smoking = `Smoking status`,
+    bmi = `Body Mass Index (BMI)`,
+    activity = `Physical activity level`,
+    diabetes_duration = `Duration of diabetes mellitus (years)`,
+    hypertension_duration = `Duration of hypertension (years)`,
+    cystatin_c = `Cystatin C level`,
+    sediment = `Urinary sediment microscopy results`,
+    crp = `C-reactive protein (CRP) level`,
+    il6 = `Interleukin-6 (IL-6) level`,
+    target = `Target`
+  )
+
+# Создание возрастных групп
+kidney_data <- kidney_data %>%
+  mutate(
+    age_group = cut(
+      age, 
+      breaks = c(0, 24, 49, 74, Inf),
+      labels = c("0-24", "25-49", "50-74", "75+"),
+      right = TRUE
+    )
+  )
+
+# Проверка структуры данных
+glimpse(kidney_data)
+```
+
+### Задание 1 Разведочный анализ
+
+```{r}
+# Анализ распределения креатинина
+creatinine_stats <- kidney_data %>%
+  summarise(
+    n = sum(!is.na(creatinine)),
+    mean = mean(creatinine, na.rm = TRUE),
+    median = median(creatinine, na.rm = TRUE),
+    sd = sd(creatinine, na.rm = TRUE),
+    iqr = IQR(creatinine, na.rm = TRUE),
+    min = min(creatinine, na.rm = TRUE),
+    max = max(creatinine, na.rm = TRUE)
+  )
+
+# Описательная статистика по группам
+activity_age_stats <- kidney_data %>%
+  group_by(age_group, activity) %>%
+  summarise(
+    n = n(),
+    mean_creatinine = mean(creatinine, na.rm = TRUE),
+    sd_creatinine = sd(creatinine, na.rm = TRUE),
+    median_creatinine = median(creatinine, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  filter(n >= 3)
+
+# Результаты
+creatinine_stats
+activity_age_stats
+```
+### Интерпретация результатов
+Среднее (mean) и медиана (median) почти идентичны (7.78), что может указывать на симметричное распределение. Самый высокий креатинин — у молодых (0–24 года) с высокой активностью (8.01), самый низкий — у средней возрастной группы (25–49) с низкой активностью (7.53).
+
+
+
+
+### Задание 2
+```{r}
+# Гистограмма
+p1 <- ggplot(kidney_data, aes(x = creatinine)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "lightblue", color = "black") +
+  geom_density(color = "red", linewidth = 1) +
+  labs(title = "Распределение уровня креатинина", 
+       x = "Креатинин сыворотки (mg/dl)", 
+       y = "Плотность")
+
+# Boxplot
+p2 <- ggplot(kidney_data, aes(x = age_group, y = creatinine, fill = activity)) +
+  geom_boxplot() +
+  labs(title = "Уровень креатинина по возрастным группам и активности",
+       x = "Возрастная группа",
+       y = "Креатинин сыворотки (mg/dl)")
+
+# QQ-plot
+p3 <- ggplot(kidney_data, aes(sample = creatinine)) +
+  stat_qq() +
+  stat_qq_line(color = "blue") +
+  labs(title = "QQ-plot для креатинина",
+       x = "Теоретические квантили",
+       y = "Выборочные квантили")
+
+# Отображение графиков
+gridExtra::grid.arrange(p1, p2, p3, ncol = 2)
+```
+### Интерпретация результатов
+Точки на графике QQ-plot отклоняются от прямой линии, особенно в хвостах распределения, что может быть связано с наличием выбросов. В целом, распределение скорее нормальное.
+Данные кажутся искусственными, (либо пациенты были тщательно подобраны), так как различия по уровню внутри возрастных групп минимальны, что противоречит научно установленным нормальным значениям. Распределение уровня креатинина по плотности также практически равное, хотя нормальные значения креатинина в сыворотке у здорового человека колеблются от 0,59-1,35 мг/дл, а у пациентов с уровнем креатинина выше вероятна почечная недостаточность.    
+
+
+### Задание 3
+
+```{r}
+# Проверка размеров групп
+table(kidney_data$activity)
+
+# Непараметрический тест
+if (all(table(kidney_data$activity) >= 3)) {
+  kruskal.test(creatinine ~ activity, data = kidney_data)
+  dunn_test(kidney_data, creatinine ~ activity, p.adjust.method = "bonferroni")
+}
+
+# График
+activ <- ggplot(kidney_data, aes(x = activity, y = creatinine, fill = pedal_edema)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("lightgreen", "salmon")) +
+  stat_compare_means(method = "wilcox.test", label = "p.signif") +
+  labs(title = "Сравнение уровня креатинина при различной активности",
+        x = "Активность", 
+        y = "Креатинин сыворотки (mg/dl)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+print(activ)
+  
+# Дополнительная переменная: appetite
+if (all(table(kidney_data$appetite) >= 3)) {
+  kruskal.test(creatinine ~ appetite, data = kidney_data)
+  dunn_test(kidney_data, creatinine ~ appetite, p.adjust.method = "bonferroni")
+  
+  ggplot(kidney_data, aes(x = appetite, y = creatinine)) +
+    geom_boxplot(fill = c("lightblue", "pink")) +
+    stat_compare_means(method = "kruskal.test") +
+    labs(title = "Сравнение уровня креатинина по аппетиту",
+         x = "Аппетит", 
+         y = "Креатинин сыворотки (mg/dl)")
+}
+
+```
+### Интерпретация результатов
+Группы активности распределены равномерно.
+Тест Бонферрони показал p-value > 0.05, что значит, что ни в одной из пар групп не выявлено статистически значимой разницы в уровне креатинина.
+По графикам боксплотов видно, что физическая активность и аппетит не влияют на уровень креатинина в сыворотке.
+
+### Задание 4
+
+```{r}
+# Построение модели
+model_lm <- lm(egfr ~ age + creatinine + diabetes, data = kidney_data)
+
+# Диагностика модели
+par(mfrow = c(2, 2))
+plot(model_lm)
+  
+# Визуальная проверка нормальности
+qqnorm(resid(model_lm))
+qqline(resid(model_lm), col = "red")
+
+# Проверка гомоскедастичности
+print(ncvTest(model_lm))
+  
+# Результаты модели
+print(summary(model_lm))
+  
+
+```
+
+### Интерпретация результатов
+
+Гетероскедастичность отсутствует.
+Линейная регрессия с предикторами age, creatinine и diabetes не объясняет вариацию скорости клубочковой фильтрации.
+На графике в основном точки следуют вдоль диагональной линии, что указывает на приблизительную нормальность распределения остатков, отклонения от прямой могут указывать на наличие выбросов в исследвуемых данных. Результат согласуется с тестом на гомоскедастичность (p = 0.451), подтверждая адекватность модели.
+
+
+### Задание 5
+
+```{r}
+# Преобразование в фактор
+kidney_data$anemia <- factor(kidney_data$anemia)
+
+# Построение модели
+model_glm <- glm(anemia ~ hemoglobin + egfr + age,
+                family = binomial(), 
+                data = kidney_data)
+
+# ROC-кривая
+probabilities <- predict(model_glm, type = "response")
+roc_curve <- roc(kidney_data$anemia, probabilities)
+plot(roc_curve, main = "ROC-кривая для модели анемии")
+
+# Результаты
+summary(model_glm)
+exp(cbind(OR = coef(model_glm), confint(model_glm)))
+```
+### Интерпретация результатов
+Ни один из предикторов не имеет статистически значимого влияния на риск анемии. 
+ROC-Кривая почти совпадает с диагональю, что говорит о низкой предсказательной силе.
+В целом, данные демонстрируют признаки искусственного происхождения: отсутствие значимых биологических связей, большой объем для исследований (>20 тыс. наблюдений) и низкую вариативность.
+
+
